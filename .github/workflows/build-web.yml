@@ -19,18 +19,40 @@ jobs:
         run: |
           version=$(curl -s 'https://api.github.com/repos/1Panel-dev/1Panel/releases/latest' | jq -r ".tag_name")
           echo "version=${version}" >> $GITHUB_OUTPUT
-          sed -i "s@ARG VERSION=.*@ARG VERSION=${version}@" Dockerfile
+
+      - name: Check Release
+        id: check-release
+        run: |
+          gh release view ${{ steps.get-version.outputs.version }} -R wojiushixiaobai/1Panel-loongarch64 >/dev/null 2>&1 || echo "create=1" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check Buile
+        id: check-build
+        run: |
+          gh release view ${{ steps.get-version.outputs.version }} -R wojiushixiaobai/1Panel-loongarch64 | grep web-${{ steps.get-version.outputs.version }}.tar.gz >/dev/null 2>&1 || echo "build=1" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Tag
         run: |
+          sed -i "s@ARG VERSION=.*@ARG VERSION=${{ steps.get-version.outputs.version }}@" Dockerfile
           git config --global user.name "${GITHUB_ACTOR}"
           git config --global user.email "${GITHUB_ACTOR}@users.noreply.github.com"
-          git tag -a "${{ steps.get-version.outputs.version }}" -m "Release ${{ steps.get-version.outputs.version }}"
-          git push origin "${{ steps.get-version.outputs.version }}"
+          git tag -a "${{ steps.get-version.outputs.version }}" -m "Release ${{ steps.get-version.outputs.version }}" || true
+          git push origin "${{ steps.get-version.outputs.version }}" || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release
+        if: steps.check-release.outputs.create == 1
+        run: |
+          gh release create ${{ steps.get-version.outputs.version }} --notes "Release ${{ steps.get-version.outputs.version }}" -R wojiushixiaobai/1Panel-loongarch64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get Source
+        if: steps.check-build.outputs.build == 1
         uses: actions/checkout@v4
         with:
           repository: 1Panel-dev/1Panel
@@ -40,11 +62,13 @@ jobs:
             frontend
 
       - name: Setup Node
+        if: steps.check-build.outputs.build == 1
         uses: actions/setup-node@v3
         with:
           node-version: '16.20'
 
       - name: Build Web
+        if: steps.check-build.outputs.build == 1
         run: |
           cd frontend
           rm -f package-lock.json
@@ -55,15 +79,16 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=8192
 
       - name: Make Files
+        if: steps.check-build.outputs.build == 1
         run: |
           mkdir -p build
           mv cmd/server/web web-${{ steps.get-version.outputs.version }}
           tar -czf build/web-${{ steps.get-version.outputs.version }}.tar.gz web-${{ steps.get-version.outputs.version }}
           echo "$(sha256sum build/web-${{ steps.get-version.outputs.version }}.tar.gz | awk '{print $1}')  web-${{ steps.get-version.outputs.version }}.tar.gz" > build/web-${{ steps.get-version.outputs.version }}.tar.gz.sha256
 
-      - name: Create Release
+      - name: Upgrade Release
+        if: steps.check-build.outputs.build == 1
         run: |
-          gh release create ${{ steps.get-version.outputs.version }} --notes "Release ${{ steps.get-version.outputs.version }}"
-          gh release upload ${{ steps.get-version.outputs.version }} build/*
+          gh release upload ${{ steps.get-version.outputs.version }} build/* -R wojiushixiaobai/1Panel-loongarch64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
