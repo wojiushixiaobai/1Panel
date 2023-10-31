@@ -21,15 +21,17 @@ RUN set -ex \
     && wget https://github.com/wojiushixiaobai/1Panel-loongarch64/releases/download/${VERSION}/web-${VERSION}.tar.gz \
     && wget https://github.com/1Panel-dev/installer/raw/main/1pctl \
     && wget https://github.com/1Panel-dev/installer/raw/main/1panel.service \
-    && wget https://github.com/wojiushixiaobai/1Panel-installer/raw/main/install.sh \
+    && wget https://github.com/1Panel-dev/installer/raw/main/install.sh \
     && tar xf web-${VERSION}.tar.gz -C cmd/server/web --strip-components=1 \
     && rm -f web-${VERSION}.tar.gz \
     && sed -i "s@github.com/glebarez/sqlite@gorm.io/driver/sqlite@g" cmd/server/cmd/root.go \
-    && sed -i "s@github.com/glebarez/sqlite@gorm.io/driver/sqlite@g" backend/init/db/db.go
+    && sed -i "s@github.com/glebarez/sqlite@gorm.io/driver/sqlite@g" backend/init/db/db.go \
     && go mod tidy \
-    && go get -u gorm.io/driver/sqlite \
-    && CGO_ENABLED=0 GOOS=linux GOARCH=loong64 go build -trimpath -ldflags '-s -w' -o ./build/1panel ./cmd/server/main.go \
+    && go get -u gorm.io/driver/sqlite
+
+RUN set -ex \
     && mkdir 1panel-${VERSION}-linux-loong64 \
+    && CGO_ENABLED=0 GOOS=linux GOARCH=loong64 go build -trimpath -ldflags '-s -w' -o ./build/1panel ./cmd/server/main.go \
     && cp -f build/1panel 1panel-${VERSION}-linux-loong64/ \
     && cp -f 1pctl 1panel-${VERSION}-linux-loong64/ \
     && cp -f 1panel.service 1panel-${VERSION}-linux-loong64/ \
@@ -37,6 +39,7 @@ RUN set -ex \
     && cp -f README.md 1panel-${VERSION}-linux-loong64/ \
     && cp -f LICENSE 1panel-${VERSION}-linux-loong64/ \
     && tar -czf 1panel-${VERSION}-linux-loong64.tar.gz 1panel-${VERSION}-linux-loong64 \
+    && sha256sum 1panel-${VERSION}-linux-loong64.tar.gz > dist/1panel-${VERSION}-linux-loong64.tar.gz.sha256 \
     && mv 1panel-${VERSION}-linux-loong64.tar.gz dist/ \
     && rm -rf 1panel-${VERSION}-linux-loong64 build
 
