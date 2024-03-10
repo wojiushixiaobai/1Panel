@@ -1,5 +1,5 @@
 FROM golang:1.21-buster as builder
-ARG VERSION=v1.7.4
+ARG VERSION=null
 ENV VERSION=${VERSION}
 
 ARG DEPENDENCIES="      \
