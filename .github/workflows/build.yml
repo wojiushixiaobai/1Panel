@@ -8,7 +8,7 @@ on:
 name: Checkout and Create Release Version
 
 jobs:
-  build:
+  web:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -59,7 +59,6 @@ jobs:
         with:
           repository: 1Panel-dev/1Panel
           ref: ${{ steps.get-version.outputs.version }}
-          fetch-depth: 0
           sparse-checkout: |
             frontend
 
@@ -67,7 +66,7 @@ jobs:
         if: steps.check-build.outputs.build == 1
         uses: actions/setup-node@v3
         with:
-          node-version: '16.20'
+          node-version: '20.13'
 
       - name: Build Web
         if: steps.check-build.outputs.build == 1
@@ -94,3 +93,71 @@ jobs:
           gh release upload ${{ steps.get-version.outputs.version }} build/* -R wojiushixiaobai/1Panel-loongarch64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  app:
+    needs: web
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Version
+        id: get-version
+        run: |
+          version=$(curl -s 'https://api.github.com/repos/1Panel-dev/1Panel/releases/latest' | jq -r ".tag_name")
+          echo "version=${version}" >> $GITHUB_OUTPUT
+      
+      - name: Check Buile
+        id: check-build
+        run: |
+          gh release view ${{ steps.get-version.outputs.version }} -R wojiushixiaobai/1Panel-loongarch64 | grep 1panel-${{ steps.get-version.outputs.version }}-linux-amd64.tar.gz >/dev/null 2>&1 || echo "build=1" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout code
+        if : steps.check-build.outputs.build == 1
+        uses: actions/checkout@v4
+        with:
+          repository: 1Panel-dev/1Panel
+          ref: ${{ steps.get-version.outputs.version }}
+
+      - name: Setup Node
+        if : steps.check-build.outputs.build == 1
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.13'
+
+      - name: Build Web
+        if : steps.check-build.outputs.build == 1
+        run: |
+          cd frontend && npm install && npm run build:pro
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+
+      - name: Setup Go
+        if : steps.check-build.outputs.build == 1
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21.x'
+
+      - name: Get File
+        if : steps.check-build.outputs.build == 1
+        run: |
+          cp -f .goreleaser.yaml goreleaser.test
+          sed -i "s@- -tags=xpack@# - -tags=xpack@g" goreleaser.test
+
+      - name: Build Release
+        if : steps.check-build.outputs.build == 1
+        uses: goreleaser/goreleaser-action@v4
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --config goreleaser.test --skip-publish --clean
+          
+      - name: Upgrade Release
+        if: steps.check-build.outputs.build == 1
+        run: |
+          gh release upload ${{ steps.get-version.outputs.version }} dist/*.tar.gz -R wojiushixiaobai/1Panel-loongarch64
+          gh release upload ${{ steps.get-version.outputs.version }} dist/checksums.txt -R wojiushixiaobai/1Panel-loongarch64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      
+    
