@@ -24,11 +24,9 @@ RUN set -ex \
     && wget https://github.com/1Panel-dev/installer/raw/main/install.sh \
     && tar xf web-${VERSION}.tar.gz -C cmd/server/web --strip-components=1 \
     && rm -f web-${VERSION}.tar.gz \
-    && sed -i "s@ORIGINAL_VERSION=.*@ORIGINAL_VERSION=${VERSION}@g" 1pctl \
-    && sed -i "s@github.com/glebarez/sqlite@gorm.io/driver/sqlite@g" cmd/server/cmd/root.go \
-    && sed -i "s@github.com/glebarez/sqlite@gorm.io/driver/sqlite@g" backend/init/db/db.go \
     && go mod tidy \
-    && go get -u gorm.io/driver/sqlite
+    && go get -u gorm.io/driver/sqlite \
+    && go get -u modernc.org/sqlite
 
 RUN set -ex \
     && mkdir 1panel-${VERSION}-linux-loong64 \
