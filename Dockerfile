@@ -1,4 +1,4 @@
-FROM golang:1.21-buster as builder
+FROM golang:1.22-buster as builder
 ARG VERSION=v1.7.4
 ENV VERSION=${VERSION}
 
