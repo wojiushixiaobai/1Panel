@@ -23,14 +23,14 @@ jobs:
       - name: Check Release
         id: check-release
         run: |
-          gh release view ${{ steps.get-version.outputs.version }} -R wojiushixiaobai/1Panel-loongarch64 >/dev/null 2>&1 || echo "create=1" >> $GITHUB_OUTPUT
+          gh release view ${{ steps.get-version.outputs.version }} -R wojiushixiaobai/1Panel >/dev/null 2>&1 || echo "create=1" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check Buile
         id: check-build
         run: |
-          gh release view ${{ steps.get-version.outputs.version }} -R wojiushixiaobai/1Panel-loongarch64 | grep web-${{ steps.get-version.outputs.version }}.tar.gz >/dev/null 2>&1 || echo "build=1" >> $GITHUB_OUTPUT
+          gh release view ${{ steps.get-version.outputs.version }} -R wojiushixiaobai/1Panel | grep web-${{ steps.get-version.outputs.version }}.tar.gz >/dev/null 2>&1 || echo "build=1" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -49,7 +49,7 @@ jobs:
       - name: Create Release
         if: steps.check-release.outputs.create == 1
         run: |
-          gh release create ${{ steps.get-version.outputs.version }} --notes "Release ${{ steps.get-version.outputs.version }}" -R wojiushixiaobai/1Panel-loongarch64
+          gh release create ${{ steps.get-version.outputs.version }} --notes "Release ${{ steps.get-version.outputs.version }}" -R wojiushixiaobai/1Panel
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -90,7 +90,7 @@ jobs:
       - name: Upgrade Release
         if: steps.check-build.outputs.build == 1
         run: |
-          gh release upload ${{ steps.get-version.outputs.version }} build/* -R wojiushixiaobai/1Panel-loongarch64
+          gh release upload ${{ steps.get-version.outputs.version }} build/* -R wojiushixiaobai/1Panel
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -103,11 +103,11 @@ jobs:
         run: |
           version=$(curl -s 'https://api.github.com/repos/1Panel-dev/1Panel/releases/latest' | jq -r ".tag_name")
           echo "version=${version}" >> $GITHUB_OUTPUT
-      
+
       - name: Check Buile
         id: check-build
         run: |
-          gh release view ${{ steps.get-version.outputs.version }} -R wojiushixiaobai/1Panel-loongarch64 | grep 1panel-${{ steps.get-version.outputs.version }}-linux-amd64.tar.gz >/dev/null 2>&1 || echo "build=1" >> $GITHUB_OUTPUT
+          gh release view ${{ steps.get-version.outputs.version }} -R wojiushixiaobai/1Panel | grep 1panel-${{ steps.get-version.outputs.version }}-linux-amd64.tar.gz >/dev/null 2>&1 || echo "build=1" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -150,14 +150,11 @@ jobs:
           distribution: goreleaser
           version: '~> v2'
           args: release --config goreleaser.test --skip=publish --clean
-          
+
       - name: Upgrade Release
         if: steps.check-build.outputs.build == 1
         run: |
-          gh release upload ${{ steps.get-version.outputs.version }} dist/*.tar.gz -R wojiushixiaobai/1Panel-loongarch64
-          gh release upload ${{ steps.get-version.outputs.version }} dist/checksums.txt -R wojiushixiaobai/1Panel-loongarch64
+          gh release upload ${{ steps.get-version.outputs.version }} dist/*.tar.gz -R wojiushixiaobai/1Panel
+          gh release upload ${{ steps.get-version.outputs.version }} dist/checksums.txt -R wojiushixiaobai/1Panel
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      
-    
