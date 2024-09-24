@@ -10,6 +10,8 @@ name: Checkout and Create Release Version
 jobs:
   web:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ env.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -18,38 +20,44 @@ jobs:
         id: get-version
         run: |
           version=$(curl -s 'https://api.github.com/repos/1Panel-dev/1Panel/releases/latest' | jq -r ".tag_name")
+          echo "Current Version: ${version}"
+          if [ -z "${version}" ]; then
+            echo "Failed to get version"
+            exit 1
+          fi
+          echo "version=${version}" >> $GITHUB_ENV
           echo "version=${version}" >> $GITHUB_OUTPUT
 
       - name: Check Release
         id: check-release
         run: |
-          gh release view ${{ steps.get-version.outputs.version }} -R wojiushixiaobai/1Panel >/dev/null 2>&1 || echo "create=1" >> $GITHUB_OUTPUT
+          gh release view ${{ env.version }} -R wojiushixiaobai/1Panel >/dev/null 2>&1 || echo "create=1" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check Buile
         id: check-build
         run: |
-          gh release view ${{ steps.get-version.outputs.version }} -R wojiushixiaobai/1Panel | grep web-${{ steps.get-version.outputs.version }}.tar.gz >/dev/null 2>&1 || echo "build=1" >> $GITHUB_OUTPUT
+          gh release view ${{ env.version }} -R wojiushixiaobai/1Panel | grep web-${{ env.version }}.tar.gz >/dev/null 2>&1 || echo "build=1" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Tag
         run: |
-          sed -i "s@ARG VERSION=.*@ARG VERSION=${{ steps.get-version.outputs.version }}@" Dockerfile
+          sed -i "s@ARG VERSION=.*@ARG VERSION=${{ env.version }}@" Dockerfile
           git config --global user.name "${GITHUB_ACTOR}"
           git config --global user.email "${GITHUB_ACTOR}@users.noreply.github.com"
           git add .
-          git commit -m "Release ${{ steps.get-version.outputs.version }}"
-          git tag -a "${{ steps.get-version.outputs.version }}" -m "Release ${{ steps.get-version.outputs.version }}" || true
-          git push origin "${{ steps.get-version.outputs.version }}" || true
+          git commit -m "Release ${{ env.version }}"
+          git tag -a "${{ env.version }}" -m "Release ${{ env.version }}" || true
+          git push origin "${{ env.version }}" || true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release
         if: steps.check-release.outputs.create == 1
         run: |
-          gh release create ${{ steps.get-version.outputs.version }} --notes "Release ${{ steps.get-version.outputs.version }}" -R wojiushixiaobai/1Panel
+          gh release create ${{ env.version }} --notes "Release ${{ env.version }}" -R wojiushixiaobai/1Panel
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -58,7 +66,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 1Panel-dev/1Panel
-          ref: ${{ steps.get-version.outputs.version }}
+          ref: ${{ env.version }}
           sparse-checkout: |
             frontend
 
@@ -83,14 +91,14 @@ jobs:
         if: steps.check-build.outputs.build == 1
         run: |
           mkdir -p build
-          mv cmd/server/web web-${{ steps.get-version.outputs.version }}
-          tar -czf build/web-${{ steps.get-version.outputs.version }}.tar.gz web-${{ steps.get-version.outputs.version }}
-          echo "$(sha256sum build/web-${{ steps.get-version.outputs.version }}.tar.gz | awk '{print $1}')  web-${{ steps.get-version.outputs.version }}.tar.gz" > build/web-${{ steps.get-version.outputs.version }}.tar.gz.sha256
+          mv cmd/server/web web-${{ env.version }}
+          tar -czf build/web-${{ env.version }}.tar.gz web-${{ env.version }}
+          echo "$(sha256sum build/web-${{ env.version }}.tar.gz | awk '{print $1}')  web-${{ env.version }}.tar.gz" > build/web-${{ env.version }}.tar.gz.sha256
 
       - name: Upgrade Release
         if: steps.check-build.outputs.build == 1
         run: |
-          gh release upload ${{ steps.get-version.outputs.version }} build/* -R wojiushixiaobai/1Panel
+          gh release upload ${{ env.version }} build/* -R wojiushixiaobai/1Panel
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -98,16 +106,28 @@ jobs:
     needs: web
     runs-on: ubuntu-latest
     steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: false
+          swap-storage: false
+
       - name: Check Version
         id: get-version
         run: |
-          version=$(curl -s 'https://api.github.com/repos/1Panel-dev/1Panel/releases/latest' | jq -r ".tag_name")
-          echo "version=${version}" >> $GITHUB_OUTPUT
+          version=${{ needs.web.outputs.version }}
+          echo "version=${version}" >> $GITHUB_ENV
+          echo "Current Version: ${version}"
 
       - name: Check Buile
         id: check-build
         run: |
-          gh release view ${{ steps.get-version.outputs.version }} -R wojiushixiaobai/1Panel | grep 1panel-${{ steps.get-version.outputs.version }}-linux-amd64.tar.gz >/dev/null 2>&1 || echo "build=1" >> $GITHUB_OUTPUT
+          gh release view ${{ env.version }} -R wojiushixiaobai/1Panel | grep 1panel-${{ env.version }}-linux-amd64.tar.gz >/dev/null 2>&1 || echo "build=1" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -116,13 +136,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 1Panel-dev/1Panel
-          ref: ${{ steps.get-version.outputs.version }}
+          ref: ${{ env.version }}
 
       - name: Setup Node
         if : steps.check-build.outputs.build == 1
         uses: actions/setup-node@v4
         with:
-          node-version: '20.13'
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: '**/package.json'
 
       - name: Build Web
         if : steps.check-build.outputs.build == 1
@@ -135,7 +157,8 @@ jobs:
         if : steps.check-build.outputs.build == 1
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: 'stable'
+          cache-dependency-path: "**/go.sum"
 
       - name: Get File
         if : steps.check-build.outputs.build == 1
@@ -154,7 +177,7 @@ jobs:
       - name: Upgrade Release
         if: steps.check-build.outputs.build == 1
         run: |
-          gh release upload ${{ steps.get-version.outputs.version }} dist/*.tar.gz -R wojiushixiaobai/1Panel
-          gh release upload ${{ steps.get-version.outputs.version }} dist/checksums.txt -R wojiushixiaobai/1Panel
+          gh release upload ${{ env.version }} dist/*.tar.gz -R wojiushixiaobai/1Panel
+          gh release upload ${{ env.version }} dist/checksums.txt -R wojiushixiaobai/1Panel
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
