@@ -4,14 +4,15 @@ on:
       - master
   schedule:
     - cron: '0 1 * * *'
+  workflow_dispatch:
 
 name: Checkout and Create Release Version
 
 jobs:
-  web:
+  check:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ env.version }}
+      version: ${{ steps.get-version.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -35,7 +36,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check Buile
+      - name: Check Build
         id: check-build
         run: |
           gh release view ${{ env.version }} -R wojiushixiaobai/1Panel | grep web-${{ env.version }}.tar.gz >/dev/null 2>&1 || echo "build=1" >> $GITHUB_OUTPUT
@@ -61,70 +62,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get Source
-        if: steps.check-build.outputs.build == 1
-        uses: actions/checkout@v4
-        with:
-          repository: 1Panel-dev/1Panel
-          ref: ${{ env.version }}
-          sparse-checkout: |
-            frontend
-
-      - name: Setup Node
-        if: steps.check-build.outputs.build == 1
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20.13'
-
-      - name: Build Web
-        if: steps.check-build.outputs.build == 1
-        run: |
-          cd frontend
-          rm -f package-lock.json
-          yarn add codemirror vue-codemirror
-          yarn install
-          yarn run build:pro
-        env:
-          NODE_OPTIONS: --max-old-space-size=8192
-
-      - name: Make Files
-        if: steps.check-build.outputs.build == 1
-        run: |
-          mkdir -p build
-          mv cmd/server/web web-${{ env.version }}
-          tar -czf build/web-${{ env.version }}.tar.gz web-${{ env.version }}
-          echo "$(sha256sum build/web-${{ env.version }}.tar.gz | awk '{print $1}')  web-${{ env.version }}.tar.gz" > build/web-${{ env.version }}.tar.gz.sha256
-
-      - name: Upgrade Release
-        if: steps.check-build.outputs.build == 1
-        run: |
-          gh release upload ${{ env.version }} build/* -R wojiushixiaobai/1Panel
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  app:
-    needs: web
+  release:
+    needs: check
     runs-on: ubuntu-latest
     steps:
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: false
-          swap-storage: false
-
       - name: Check Version
         id: get-version
         run: |
-          version=${{ needs.web.outputs.version }}
+          version=${{ needs.check.outputs.version }}
           echo "version=${version}" >> $GITHUB_ENV
           echo "Current Version: ${version}"
 
-      - name: Check Buile
+      - name: Check Build
         id: check-build
         run: |
           gh release view ${{ env.version }} -R wojiushixiaobai/1Panel | grep 1panel-${{ env.version }}-linux-amd64.tar.gz >/dev/null 2>&1 || echo "build=1" >> $GITHUB_OUTPUT
@@ -138,13 +87,21 @@ jobs:
           repository: 1Panel-dev/1Panel
           ref: ${{ env.version }}
 
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            ~/.cache
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-1panel-web-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-1panel-web-
+
       - name: Setup Node
         if : steps.check-build.outputs.build == 1
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: '**/package.json'
 
       - name: Build Web
         if : steps.check-build.outputs.build == 1
@@ -158,26 +115,35 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: 'stable'
-          cache-dependency-path: "**/go.sum"
 
       - name: Get File
         if : steps.check-build.outputs.build == 1
         run: |
-          cp -f .goreleaser.yaml goreleaser.test
-          sed -i "s@- -tags=xpack@# - -tags=xpack@g" goreleaser.test
+          wget -O goreleaser.test https://github.com/${{ github.repository }}/raw/refs/heads/master/.goreleaser.yaml
 
-      - name: Build Release
+      - name: Build Binary
         if : steps.check-build.outputs.build == 1
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: '~> v2'
           args: release --config goreleaser.test --skip=publish --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Make Files
+        if: steps.check-build.outputs.build == 1
+        run: |
+          mkdir -p build
+          mv cmd/server/web web-${{ env.version }}
+          tar -czf build/web-${{ env.version }}.tar.gz web-${{ env.version }}
+          echo "$(sha256sum build/web-${{ env.version }}.tar.gz | awk '{print $1}')  web-${{ env.version }}.tar.gz" > build/web-${{ env.version }}.tar.gz.sha256
 
       - name: Upgrade Release
         if: steps.check-build.outputs.build == 1
         run: |
-          gh release upload ${{ env.version }} dist/*.tar.gz -R wojiushixiaobai/1Panel
-          gh release upload ${{ env.version }} dist/checksums.txt -R wojiushixiaobai/1Panel
+          gh release upload ${{ env.version }} build/* -R ${{ github.repository }}
+          gh release upload ${{ env.version }} dist/*.tar.gz -R ${{ github.repository }}
+          gh release upload ${{ env.version }} dist/*.txt -R ${{ github.repository }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
