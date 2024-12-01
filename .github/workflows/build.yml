@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.get-version.outputs.version }}
+      build: ${{ steps.check-build.outputs.build }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -46,8 +47,8 @@ jobs:
       - name: Create Tag
         run: |
           sed -i "s@ARG VERSION=.*@ARG VERSION=${{ env.version }}@" Dockerfile
-          git config --global user.name "${GITHUB_ACTOR}"
-          git config --global user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .
           git commit -m "Release ${{ env.version }}"
           git tag -a "${{ env.version }}" -m "Release ${{ env.version }}" || true
@@ -65,12 +66,13 @@ jobs:
   release:
     needs: check
     runs-on: ubuntu-latest
+    if: needs.check.outputs.build == 1
+    env:
+      version: ${{ needs.check.outputs.version }}
     steps:
       - name: Check Version
         id: get-version
         run: |
-          version=${{ needs.check.outputs.version }}
-          echo "version=${version}" >> $GITHUB_ENV
           echo "Current Version: ${version}"
 
       - name: Check Build
@@ -81,7 +83,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Checkout code
-        if : steps.check-build.outputs.build == 1
         uses: actions/checkout@v4
         with:
           repository: 1Panel-dev/1Panel
@@ -98,31 +99,26 @@ jobs:
           restore-keys: ${{ runner.os }}-1panel-web-
 
       - name: Setup Node
-        if : steps.check-build.outputs.build == 1
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Build Web
-        if : steps.check-build.outputs.build == 1
         run: |
           cd frontend && npm install && npm run build:pro
         env:
           NODE_OPTIONS: --max-old-space-size=8192
 
       - name: Setup Go
-        if : steps.check-build.outputs.build == 1
         uses: actions/setup-go@v5
         with:
           go-version: 'stable'
 
       - name: Get File
-        if : steps.check-build.outputs.build == 1
         run: |
           wget -O goreleaser.test https://github.com/${{ github.repository }}/raw/refs/heads/master/.goreleaser.yaml
 
       - name: Build Binary
-        if : steps.check-build.outputs.build == 1
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
@@ -132,7 +128,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Make Files
-        if: steps.check-build.outputs.build == 1
         run: |
           mkdir -p build
           mv cmd/server/web web-${{ env.version }}
@@ -140,7 +135,6 @@ jobs:
           echo "$(sha256sum build/web-${{ env.version }}.tar.gz | awk '{print $1}')  web-${{ env.version }}.tar.gz" > build/web-${{ env.version }}.tar.gz.sha256
 
       - name: Upgrade Release
-        if: steps.check-build.outputs.build == 1
         run: |
           gh release upload ${{ env.version }} build/* -R ${{ github.repository }}
           gh release upload ${{ env.version }} dist/*.tar.gz -R ${{ github.repository }}
