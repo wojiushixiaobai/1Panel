@@ -6,8 +6,8 @@ before:
   hooks:
     # - export NODE_OPTIONS="--max-old-space-size=8192"
     # - make build_web
-    - chmod +x ./script.sh
-    - ./script.sh
+    - chmod +x ./ci/script.sh
+    - ./ci/script.sh
     - sed -i 's@ORIGINAL_VERSION=.*@ORIGINAL_VERSION=v{{ .Version }}@g' 1pctl
     - sed -i 's@/usr/bin/1panel@/usr/local/bin/1panel@g' 1panel.service
     - go get -u modernc.org/sqlite
@@ -47,6 +47,7 @@ archives:
       - install.sh
       - README.md
       - LICENSE
+      - lang/*
     # use zip for windows archives
     format_overrides:
       - goos: windows
