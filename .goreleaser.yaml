@@ -10,7 +10,7 @@ before:
     - ./ci/script.sh
     - sed -i 's@ORIGINAL_VERSION=.*@ORIGINAL_VERSION=v{{ .Version }}@g' 1pctl
     - sed -i 's@/usr/bin/1panel@/usr/local/bin/1panel@g' 1panel.service
-    - go get -u modernc.org/sqlite
+    # - go get -u modernc.org/sqlite
     - go mod tidy
 
 builds:
